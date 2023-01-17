@@ -5,6 +5,6 @@
 def update_topics(mongo_collection, name, topics):
     if mongo_collection is not None:
         return mongo_collection.update_many(
-                {"name": name}, 
+                {"name": name},
                 {"$set": {"topics": topics}}
                 )
