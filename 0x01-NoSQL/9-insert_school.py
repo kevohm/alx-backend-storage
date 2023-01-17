@@ -1,5 +1,6 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 """ insert to school """
+
 
 def insert_school(mongo_collection, **kwargs):
     """return id of inserted doc """
