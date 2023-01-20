@@ -1,78 +1,77 @@
 #!/usr/bin/env python3
-"""
-exercise.py
-"""
+"""0. Writing strings to Redis"""
 import redis
 import uuid
-from typing import Union, Optional, Callable
+from typing import Union, Callable, Optional
 from functools import wraps
 
 
-def count_calls(fn: Callable) -> Callable:
-    """ decorator """
+def count_calls(method: Callable) -> Callable:
+    """Count how many times methods of the Cache class are called"""
 
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
-        """Wrapper func"""
-        key = fn.__qualname__
-        self.__redis.incr(key)
-        return method(self, *args, **kwargs)
+    @wraps(method)
+    def wrapper(self, *args, **kwds):
+        """Wrapper function"""
+        key = method.__qualname__
+        self._redis.incr(key)
+        return method(self, *args, **kwds)
+
     return wrapper
 
 
-def call_history(fn: Callable) -> Callable:
-    """store the history of inputs and outputs for a particular function"""
+def call_history(method: Callable) -> Callable:
+    """Store the history of inputs and outputs for a particular function"""
 
-    @wraps(fn)
-    def wrapper(self, *args, **kwargs):
+    @wraps(method)
+    def wrapper(self, *args, **kwds):
         """Wrapper function"""
-        self.__redis.rpush(method.__qualname__ + ":inputs", str(args))
-        output = fn(self, *args, **kwargs)
-        self.__redis.rpush(method.__qualname__ + ":outputs", str(output))
+        self._redis.rpush(method.__qualname__ + ":inputs", str(args))
+        output = method(self, *args, **kwds)
+        self._redis.rpush(method.__qualname__ + ":outputs", str(output))
         return output
+
     return wrapper
 
 
 class Cache:
-    """store an instance of the Redis"""
-
+    """Cache class"""
     def __init__(self):
-        """constructor"""
-        self.__redis = redis.Redis()
-        self.__redis.flushdb()
+        """Constructor"""
+        self._redis = redis.Redis()
+        self._redis.flushdb()
 
     @count_calls
     @call_history
     def store(self, data: Union[str, bytes, int, float]) -> str:
-        """"takes a data argument and returns a string"""
+        """Store data in redis"""
         key = str(uuid.uuid4())
-        self.__redis.set(key, data)
+        self._redis.set(key, data)
         return key
 
     def get(self, key: str, fn: Optional[Callable] = None) ->\
-            Union[str, int, bytes, float]:
-        """Fetch data data"""
-        data = self.__redis.get(key)
+            Union[str, bytes, int, float, None]:
+        """Get data from redis"""
+        data = self._redis.get(key)
         if fn:
             return fn(data)
         return data
 
     def get_str(self, key: str) -> str:
-        """fetch string"""
-        return self.__redis.get(key, str)
+        """Get data from redis as string"""
+        return self.get(key, str)
 
     def get_int(self, key: str) -> int:
-        """fetch integer"""
-        return self.__redis.get(key, int)
+        """Get data from redis as integer"""
+        return self.get(key, int)
 
-    def replay(val: Cache):
-        """display the history of calls of a particular function"""
-        cls = val.__qualname__
-        print("{} was called".format(
-            cls, val.__self__.get(cls).decode("utf-8")))
-        inputs = val.__self__.__redis.lrange("{}:inputs".format(cls), 0, -1)
-        outputs = val.__self__.__redis.lrange("{}:outputs".format(cls), 0, -1)
-        zipped = zip(inputs, outputs)
-        for i, o in zipped:
-            print("{}({}) -> ({})".format(
-                    cls, i.decode("utf-8"), o.decode("utf-8")))
+
+def replay(val: Cache):
+    """display history of all calls made on a particular class"""
+    clsName = val.__qualname__
+    print(f"""{clsName} was called {
+            val.__self__.get(clsName).decode("utf-8")} times:""")
+    inputs = val.__self__._redis.lrange(f"{clsName}:inputs", 0, -1)
+    outputs = val.__self__._redis.lrange(f"{clsName}:outputs", 0, -1)
+    zipped = zip(inputs, outputs)
+    for i, o in zipped:
+        print(f"""{clsName}(*{i.decode("utf-8")}) -> {o.decode("utf-8")}""")
